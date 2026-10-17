@@ -1,0 +1,192 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>模型指纹色彩测试</title>
+    <!-- Google Material Symbols & Fonts -->
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@24,400,0,0" />
+    <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Noto+Sans+SC:wght@400;500;700&display=swap">
+    <link rel="stylesheet" href="styles.css">
+</head>
+<body>
+
+<header>
+    <h1>模型色彩指纹</h1>
+    <div class="header-actions">
+        <button class="icon-btn" id="loadConfigBtn" title="读取预设">
+            <span class="material-symbols-outlined">folder_open</span>
+        </button>
+        <button class="icon-btn" id="saveConfigBtn" title="保存为预设">
+            <span class="material-symbols-outlined">save</span>
+        </button>
+    </div>
+</header>
+
+<main>
+    <!-- 接口设置 -->
+    <div class="config-grid">
+        <div class="input-group span-2">
+            <label>接口地址 BASE URL</label>
+            <input type="text" id="baseUrl" placeholder="https://api.openai.com/v1">
+        </div>
+        <div class="input-group span-2">
+            <label>密钥 API KEY</label>
+            <input type="password" id="apiKey" placeholder="sk-...">
+        </div>
+        <div class="input-group">
+            <label id="providerTypeLabel">协议类型</label>
+            <div class="md-select" data-md-select>
+                <button type="button" class="md-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="providerTypeLabel">
+                    <span class="md-select-value"></span>
+                    <span class="material-symbols-outlined chevron">arrow_drop_down</span>
+                </button>
+                <select id="providerType" class="native-select" tabindex="-1" aria-hidden="true">
+                    <option value="chat">chat (经典 OpenAI)</option>
+                    <option value="response">response (新 OpenAI)</option>
+                    <option value="message">message (Claude)</option>
+                </select>
+            </div>
+        </div>
+        <div class="input-group">
+            <label>模型 MODEL ID</label>
+            <input type="text" id="modelId" placeholder="例如 gpt-4o, claude-3-5-sonnet">
+        </div>
+        <div class="input-group">
+            <label id="reasoningPresetLabel">思考强度</label>
+            <div class="md-select" data-md-select>
+                <button type="button" class="md-select-trigger" aria-haspopup="listbox" aria-expanded="false" aria-labelledby="reasoningPresetLabel">
+                    <span class="md-select-value"></span>
+                    <span class="material-symbols-outlined chevron">arrow_drop_down</span>
+                </button>
+                <select id="reasoningPreset" class="native-select" tabindex="-1" aria-hidden="true">
+                    <option value="none">关闭</option>
+                    <option value="low">低</option>
+                    <option value="medium">中</option>
+                    <option value="high">高</option>
+                    <option value="xhigh">极高</option>
+                    <option value="max">最大</option>
+                    <option value="custom">自定义数值</option>
+                </select>
+            </div>
+        </div>
+        <div class="input-group" id="customReasoningWrap" hidden>
+            <label>思考强度数值</label>
+            <input type="number" id="customReasoningEffort" placeholder="预算或权重数值">
+        </div>
+    </div>
+
+    <!-- 任务设定 -->
+    <div class="config-grid">
+        <div class="input-group span-2">
+            <label>色彩主题描述</label>
+            <input type="text" id="colorPrompt" value="沙漠中的黄色配色板">
+        </div>
+        <div class="input-group">
+            <label>每组颜色数量</label>
+            <input type="number" id="colorCount" value="16" min="1" max="128">
+        </div>
+        <div class="input-group">
+            <label>并发重复次数</label>
+            <input type="number" id="repeatCount" value="4" min="1" max="32">
+        </div>
+        <div class="switch-group">
+            <span class="switch-label" id="autoSortLabel">自动排序</span>
+            <button class="switch" id="autoSortSwitch" type="button" role="switch"
+                    aria-checked="false" aria-labelledby="autoSortLabel"
+                    title="开启后，每一行色块按色彩值升序排列"></button>
+        </div>
+    </div>
+
+    <!-- 交互行为 -->
+    <div class="actions-row">
+        <button class="btn-large btn-primary" id="startBtn">
+            <span class="material-symbols-outlined">play_arrow</span>
+            开始测试
+        </button>
+        <button class="btn-large btn-secondary" id="exportBtn" disabled>
+            <span class="material-symbols-outlined">download</span>
+            导出图像
+        </button>
+    </div>
+
+    <!-- 实时色板流水展示区 -->
+    <div class="palette-display-area" id="paletteBoard"></div>
+</main>
+
+<canvas id="exportCanvas"></canvas>
+
+<!-- 保存预设弹窗 -->
+<div class="dialog-scrim" id="savePresetDialog" role="dialog" aria-modal="true" aria-labelledby="savePresetTitle" aria-hidden="true" inert>
+    <div class="dialog">
+        <div class="dialog-head">
+            <h2 id="savePresetTitle">保存预设</h2>
+            <p>为当前接口与任务设置命名，之后可一键读取。</p>
+        </div>
+        <div class="dialog-body">
+            <div class="field">
+                <label for="presetNameInput">预设名称</label>
+                <input type="text" id="presetNameInput" maxlength="60" placeholder="例如 沙漠黄 · GPT-4o" autocomplete="off">
+            </div>
+        </div>
+        <div class="dialog-foot">
+            <button class="btn-text" type="button" data-dialog-close>取消</button>
+            <button class="btn-text emphasis" type="button" id="confirmSavePreset">保存</button>
+        </div>
+    </div>
+</div>
+
+<!-- 读取预设弹窗 -->
+<div class="dialog-scrim" id="presetListDialog" role="dialog" aria-modal="true" aria-labelledby="presetListTitle" aria-hidden="true" inert>
+    <div class="dialog">
+        <div class="dialog-head">
+            <h2 id="presetListTitle">读取预设</h2>
+            <p>选择一个已保存的接口预设，或重命名、删除列表项。</p>
+        </div>
+        <div class="dialog-body">
+            <div class="preset-list" id="presetList"></div>
+        </div>
+        <div class="dialog-foot">
+            <button class="btn-text" type="button" data-dialog-close>关闭</button>
+        </div>
+    </div>
+</div>
+
+<!-- 重命名预设弹窗 -->
+<div class="dialog-scrim" id="renamePresetDialog" role="dialog" aria-modal="true" aria-labelledby="renamePresetTitle" aria-hidden="true" inert>
+    <div class="dialog">
+        <div class="dialog-head">
+            <h2 id="renamePresetTitle">重命名预设</h2>
+        </div>
+        <div class="dialog-body">
+            <div class="field">
+                <label for="renamePresetInput">预设名称</label>
+                <input type="text" id="renamePresetInput" maxlength="60" autocomplete="off">
+            </div>
+        </div>
+        <div class="dialog-foot">
+            <button class="btn-text" type="button" data-dialog-close>取消</button>
+            <button class="btn-text emphasis" type="button" id="confirmRenamePreset">确定</button>
+        </div>
+    </div>
+</div>
+
+<!-- 删除确认弹窗 -->
+<div class="dialog-scrim" id="confirmDialog" role="alertdialog" aria-modal="true" aria-labelledby="confirmTitle" aria-hidden="true" inert>
+    <div class="dialog dialog-compact">
+        <div class="dialog-head">
+            <h2 id="confirmTitle">删除预设</h2>
+            <p id="confirmMessage"></p>
+        </div>
+        <div class="dialog-foot">
+            <button class="btn-text" type="button" data-dialog-close>取消</button>
+            <button class="btn-text danger" type="button" id="confirmOk">删除</button>
+        </div>
+    </div>
+</div>
+
+<div class="snackbar" id="snackbar" role="status" aria-live="polite"></div>
+
+    <script src="app.js"></script>
+</body>
+</html>
