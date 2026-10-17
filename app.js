@@ -10,8 +10,8 @@ const colorPromptEl = document.getElementById('colorPrompt');
 const colorCountEl = document.getElementById('colorCount');
 const repeatCountEl = document.getElementById('repeatCount');
 const autoSortSwitch = document.getElementById('autoSortSwitch');
+const hslSortGroup = document.getElementById('hslSortGroup');
 const hslSortSwitch = document.getElementById('hslSortSwitch');
-const hslSortLabel = document.getElementById('hslSortLabel');
 const commonColorSwitch = document.getElementById('commonColorSwitch');
 const startBtn = document.getElementById('startBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -57,7 +57,7 @@ function applyFormConfig(cfg) {
     colorCountEl.value = cfg.colorCount || 16;
     repeatCountEl.value = cfg.repeatCount || 4;
     setAutoSort(cfg.autoSort === true);
-    setHslSort(cfg.hslSort !== false);
+    setHslSort(cfg.hslSort === true);
     setCommonColor(cfg.commonColor === true);
     activePresetId = cfg.presetId || '';
     toggleReasoningInput();
@@ -154,14 +154,13 @@ function describeRequestError(err) {
 }
 
 // 自动排序开关
-let hslSortEnabled = true;
+let hslSortEnabled = false;
 
 function setAutoSort(enabled) {
     autoSortEnabled = enabled;
     autoSortSwitch.setAttribute('aria-checked', String(enabled));
-    // HSL 排序从属于自动排序：关闭排序时禁用，但保留用户的选择
-    hslSortSwitch.disabled = !enabled;
-    hslSortLabel.classList.toggle('switch-label-disabled', !enabled);
+    // HSL 排序从属于自动排序：未启用排序时整组隐藏，保留用户的选择
+    hslSortGroup.hidden = !enabled;
 }
 
 autoSortSwitch.addEventListener('click', () => {

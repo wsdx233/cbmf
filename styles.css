@@ -266,9 +266,14 @@ input:focus, select:focus {
     cursor: pointer;
 }
 
-.switch-label-disabled {
-    opacity: 0.38;
-    cursor: default;
+.switch-item {
+    display: inline-flex;
+    align-items: center;
+    gap: 20px;
+}
+
+.switch-item[hidden] {
+    display: none;
 }
 
 .switch {
