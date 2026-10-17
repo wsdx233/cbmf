@@ -10,6 +10,8 @@ const colorPromptEl = document.getElementById('colorPrompt');
 const colorCountEl = document.getElementById('colorCount');
 const repeatCountEl = document.getElementById('repeatCount');
 const autoSortSwitch = document.getElementById('autoSortSwitch');
+const hslSortSwitch = document.getElementById('hslSortSwitch');
+const hslSortLabel = document.getElementById('hslSortLabel');
 const commonColorSwitch = document.getElementById('commonColorSwitch');
 const startBtn = document.getElementById('startBtn');
 const exportBtn = document.getElementById('exportBtn');
@@ -37,6 +39,7 @@ function readFormConfig() {
         colorCount: colorCountEl.value,
         repeatCount: repeatCountEl.value,
         autoSort: autoSortEnabled,
+        hslSort: hslSortEnabled,
         commonColor: commonColorEnabled,
         presetId: activePresetId
     };
@@ -54,6 +57,7 @@ function applyFormConfig(cfg) {
     colorCountEl.value = cfg.colorCount || 16;
     repeatCountEl.value = cfg.repeatCount || 4;
     setAutoSort(cfg.autoSort === true);
+    setHslSort(cfg.hslSort !== false);
     setCommonColor(cfg.commonColor === true);
     activePresetId = cfg.presetId || '';
     toggleReasoningInput();
@@ -107,14 +111,73 @@ function showSnackbar(message) {
     snackbarTimer = setTimeout(() => snackbarEl.classList.remove('show'), 2600);
 }
 
+// 点击色块复制 HEX；非安全上下文或无剪贴板权限时退回 execCommand
+async function copyHex(hex) {
+    try {
+        await navigator.clipboard.writeText(hex);
+        showSnackbar(`已复制 ${hex}`);
+        return;
+    } catch (e) {
+        // 继续走降级路径
+    }
+    const helper = document.createElement('textarea');
+    helper.value = hex;
+    helper.setAttribute('readonly', '');
+    helper.style.position = 'fixed';
+    helper.style.top = '-1000px';
+    helper.style.opacity = '0';
+    document.body.appendChild(helper);
+    helper.select();
+    let copied = false;
+    try {
+        copied = document.execCommand('copy');
+    } catch (e) {
+        copied = false;
+    }
+    helper.remove();
+    showSnackbar(copied ? `已复制 ${hex}` : `复制失败：${hex}`);
+}
+
+paletteBoard.addEventListener('click', (e) => {
+    const block = e.target.closest('.color-block');
+    if (!block) return;
+    copyHex(block.dataset.hex);
+});
+
+// 网络/接口错误转成用户能看懂的一句话
+function describeRequestError(err) {
+    const raw = String(err?.message || err || '未知错误');
+    if (/failed to fetch|networkerror|load failed|network request failed/i.test(raw)) {
+        return '网络请求失败：跨域被拒绝、地址不可达或证书错误';
+    }
+    return raw.replace(/\s+/g, ' ').slice(0, 160);
+}
+
 // 自动排序开关
+let hslSortEnabled = true;
+
 function setAutoSort(enabled) {
     autoSortEnabled = enabled;
     autoSortSwitch.setAttribute('aria-checked', String(enabled));
+    // HSL 排序从属于自动排序：关闭排序时禁用，但保留用户的选择
+    hslSortSwitch.disabled = !enabled;
+    hslSortLabel.classList.toggle('switch-label-disabled', !enabled);
 }
 
 autoSortSwitch.addEventListener('click', () => {
     setAutoSort(!autoSortEnabled);
+    sortDisplayedRows();
+    saveConfig();
+});
+
+// HSL 排序：开启时按色相/饱和度/明度排序，关闭时退回 HEX 数值排序
+function setHslSort(enabled) {
+    hslSortEnabled = enabled;
+    hslSortSwitch.setAttribute('aria-checked', String(enabled));
+}
+
+hslSortSwitch.addEventListener('click', () => {
+    setHslSort(!hslSortEnabled);
     sortDisplayedRows();
     saveConfig();
 });
@@ -527,10 +590,55 @@ function hexSortValue(hex) {
     return Number.isNaN(num) ? Infinity : num;
 }
 
+// HEX -> HSL，色相 0-360、饱和度/明度 0-1
+function hexToHsl(hex) {
+    let h = hex.replace('#', '');
+    if (h.length === 3) h = h.split('').map(c => c + c).join('');
+    const num = parseInt(h, 16);
+    if (Number.isNaN(num)) return { h: 0, s: 0, l: 0 };
+    const r = ((num >> 16) & 255) / 255;
+    const g = ((num >> 8) & 255) / 255;
+    const b = (num & 255) / 255;
+    const max = Math.max(r, g, b);
+    const min = Math.min(r, g, b);
+    const l = (max + min) / 2;
+    const d = max - min;
+    if (d === 0) return { h: 0, s: 0, l };
+    const s = d / (1 - Math.abs(2 * l - 1));
+    let hue;
+    if (max === r) hue = ((g - b) / d) % 6;
+    else if (max === g) hue = (b - r) / d + 2;
+    else hue = (r - g) / d + 4;
+    hue *= 60;
+    if (hue < 0) hue += 360;
+    return { h: hue, s, l };
+}
+
+// 排序键：HSL 模式按 色相 -> 明度 -> 饱和度，无彩色按明度排在最前
+// HSL 排序仅在自动排序开启时生效，否则退回 HEX 数值排序
+function sortValue(hex) {
+    if (!autoSortEnabled || !hslSortEnabled) return hexSortValue(hex);
+    const { h, s, l } = hexToHsl(hex);
+    if (s === 0) return [-1, l, 0]; // 灰阶不参与色相排序
+    return [h, l, s];
+}
+
+function compareSortKeys(a, b) {
+    if (!Array.isArray(a) || !Array.isArray(b)) return a - b;
+    for (let i = 0; i < a.length; i++) {
+        if (a[i] !== b[i]) return a[i] - b[i];
+    }
+    return 0;
+}
+
+function compareColors(a, b) {
+    return compareSortKeys(sortValue(a), sortValue(b));
+}
+
 function sortedRow(row) {
     return row
         .map((hex, index) => ({ hex, index }))
-        .sort((a, b) => hexSortValue(a.hex) - hexSortValue(b.hex) || a.index - b.index)
+        .sort((a, b) => compareColors(a.hex, b.hex) || a.index - b.index)
         .map(item => item.hex);
 }
 
@@ -563,8 +671,7 @@ function buildColorBlock(hex, { animate = true } = {}) {
 // 流式追加：开启自动排序时插入到正确位置
 function insertSortedBlock(rowEl, hex) {
     const block = buildColorBlock(hex);
-    const value = hexSortValue(hex);
-    const next = Array.from(rowEl.children).find(el => hexSortValue(el.dataset.hex) > value);
+    const next = Array.from(rowEl.children).find(el => compareColors(hex, el.dataset.hex) < 0);
     if (next) rowEl.insertBefore(block, next);
     else rowEl.appendChild(block);
 }
@@ -607,7 +714,7 @@ function commonColors() {
     return Array.from(counts.entries())
         .filter(([, count]) => count > threshold)
         .map(([hex]) => hex)
-        .sort((a, b) => hexSortValue(a) - hexSortValue(b));
+        .sort(compareColors);
 }
 
 const COMMON_ROW_ID = 'palette-row-common';
@@ -827,7 +934,8 @@ startBtn.addEventListener('click', async () => {
     const count = parseInt(colorCountEl.value) || 16;
 
     if (!modelIdEl.value.trim() || !baseUrlEl.value.trim()) {
-        alert('请填写 Base URL 和 Model ID');
+        showSnackbar('请填写 Base URL 和 Model ID');
+        (!baseUrlEl.value.trim() ? baseUrlEl : modelIdEl).focus();
         return;
     }
 
@@ -853,8 +961,11 @@ startBtn.addEventListener('click', async () => {
             appendColorBlock(rowEl, hex);
             scheduleCommonRowUpdate();
         }).catch(err => {
+            const reason = describeRequestError(err);
             console.error(`第 ${i + 1} 组失败:`, err);
             rowEl.style.outline = '2px dashed red';
+            rowEl.title = `第 ${i + 1} 组失败：${reason}`;
+            showSnackbar(`第 ${i + 1} 组失败：${reason}`);
         });
     });
 

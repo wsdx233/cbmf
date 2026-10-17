@@ -97,7 +97,11 @@
             <span class="switch-label" id="autoSortLabel">自动排序</span>
             <button class="switch" id="autoSortSwitch" type="button" role="switch"
                     aria-checked="false" aria-labelledby="autoSortLabel"
-                    title="开启后，每一行色块按色彩值升序排列"></button>
+                    title="开启后，每一行色块按所选算法排序"></button>
+            <span class="switch-label" id="hslSortLabel">HSL 排序</span>
+            <button class="switch" id="hslSortSwitch" type="button" role="switch"
+                    aria-checked="true" aria-labelledby="hslSortLabel" disabled
+                    title="开启后按 HSL 色相/饱和度/明度排序；关闭则按 HEX 数值排序。仅在开启自动排序后生效"></button>
             <span class="switch-label" id="commonColorLabel">共有色</span>
             <button class="switch" id="commonColorSwitch" type="button" role="switch"
                     aria-checked="false" aria-labelledby="commonColorLabel"
@@ -222,9 +226,16 @@
                     <li><strong>message（Claude）</strong>：system 放 <code>system</code> 字段，user 放 messages，<code>max_tokens</code> 固定 4096，开启思考时使用 <code>thinking.budget_tokens</code>。</li>
                 </ul>
                 <p class="about-sub">排序</p>
-                <p>把 HEX 当作十六进制整数升序比较（<code>#RRGGBB</code> 数值越小越靠前），数值相同的颜色保持原始出现顺序。开启「自动排序」后，每一行在流式追加时即插入到正确位置；导出的图像也按当前展示顺序绘制。</p>
+                <p>「自动排序」开启后，每一行在流式追加时即插入到正确位置，导出的图像也按当前展示顺序绘制。排序算法由右侧「HSL 排序」开关决定：</p>
+                <ul>
+                    <li><strong>HSL 排序（默认开启）</strong>：先按色相 0–360° 排列，同色相再按明度、饱和度升序；无彩色（灰阶）按明度排在最前。视觉上是自然的色谱过渡。</li>
+                    <li><strong>HSL 排序关闭</strong>：把 HEX 当作十六进制整数升序比较（<code>#RRGGBB</code> 数值越小越靠前），适合严格比对数据。两种算法的数值相同的颜色都保持原始出现顺序。</li>
+                </ul>
+                <p>关闭「自动排序」时 HSL 开关会变为不可用，此时颜色按模型输出顺序展示。</p>
                 <p class="about-sub">共有色</p>
-                <p>先对每组内部去重（忽略大小写），统计每种颜色出现在多少个组中；保留出现组数<strong>严格超过一半</strong>（组数 ÷ 2）的颜色，统一转为大写并按 HEX 数值升序排列，追加为最下方一行。该行始终自动排序，开启「共有色」时也会一并进入导出图像。</p>
+                <p>先对每组内部去重（忽略大小写），统计每种颜色出现在多少个组中；保留出现组数<strong>严格超过一半</strong>（组数 ÷ 2）的颜色，统一转为大写，并按当前生效的排序算法排列，追加为最下方一行。该行始终自动排序，开启「共有色」时也会一并进入导出图像。</p>
+                <p class="about-sub">复制</p>
+                <p>点击任意色块即可复制其 HEX 值，右下角会给出提示。</p>
             </section>
             <section class="about-section">
                 <h3>3. 作者</h3>

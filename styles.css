@@ -266,6 +266,11 @@ input:focus, select:focus {
     cursor: pointer;
 }
 
+.switch-label-disabled {
+    opacity: 0.38;
+    cursor: default;
+}
+
 .switch {
     position: relative;
     width: 64px;
@@ -306,6 +311,11 @@ input:focus, select:focus {
 .switch:focus-visible {
     outline: 2px solid var(--primary);
     outline-offset: 3px;
+}
+
+.switch:disabled {
+    opacity: 0.38;
+    cursor: default;
 }
 
 /* 操作按钮 */
@@ -385,6 +395,7 @@ input:focus, select:focus {
     flex: 1 1 0;
     min-width: 0;
     height: 100%;
+    cursor: pointer;
     opacity: 0;
     transform: scaleX(0.4);
     transform-origin: left center;
