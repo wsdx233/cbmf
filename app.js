@@ -10,6 +10,7 @@ const colorPromptEl = document.getElementById('colorPrompt');
 const colorCountEl = document.getElementById('colorCount');
 const repeatCountEl = document.getElementById('repeatCount');
 const autoSortSwitch = document.getElementById('autoSortSwitch');
+const commonColorSwitch = document.getElementById('commonColorSwitch');
 const startBtn = document.getElementById('startBtn');
 const exportBtn = document.getElementById('exportBtn');
 const paletteBoard = document.getElementById('paletteBoard');
@@ -20,6 +21,7 @@ const snackbarEl = document.getElementById('snackbar');
 const STORAGE_KEY = 'COLOR_FINGERPRINT_CONFIG';
 const PRESETS_KEY = 'COLOR_FINGERPRINT_PRESETS';
 let autoSortEnabled = false;
+let commonColorEnabled = false;
 let activePresetId = '';
 
 // 读取当前表单配置
@@ -35,6 +37,7 @@ function readFormConfig() {
         colorCount: colorCountEl.value,
         repeatCount: repeatCountEl.value,
         autoSort: autoSortEnabled,
+        commonColor: commonColorEnabled,
         presetId: activePresetId
     };
 }
@@ -51,6 +54,7 @@ function applyFormConfig(cfg) {
     colorCountEl.value = cfg.colorCount || 16;
     repeatCountEl.value = cfg.repeatCount || 4;
     setAutoSort(cfg.autoSort === true);
+    setCommonColor(cfg.commonColor === true);
     activePresetId = cfg.presetId || '';
     toggleReasoningInput();
     syncCustomSelects();
@@ -112,6 +116,18 @@ function setAutoSort(enabled) {
 autoSortSwitch.addEventListener('click', () => {
     setAutoSort(!autoSortEnabled);
     sortDisplayedRows();
+    saveConfig();
+});
+
+// 共有色开关：追加一行出现在超过一半组中的颜色（始终自动排序）
+function setCommonColor(enabled) {
+    commonColorEnabled = enabled;
+    commonColorSwitch.setAttribute('aria-checked', String(enabled));
+}
+
+commonColorSwitch.addEventListener('click', () => {
+    setCommonColor(!commonColorEnabled);
+    renderCommonRow({ animate: false });
     saveConfig();
 });
 
@@ -518,13 +534,18 @@ function displayRow(index) {
     return autoSortEnabled ? sortedRow(row) : row.slice();
 }
 
-function buildColorBlock(hex) {
+function buildColorBlock(hex, { animate = true } = {}) {
     const block = document.createElement('div');
     block.className = 'color-block';
     block.style.backgroundColor = hex;
     block.style.color = hex; // 供 currentColor 缝隙补丁使用
     block.title = hex;
     block.dataset.hex = hex;
+    if (!animate) {
+        block.style.animation = 'none';
+        block.style.opacity = '1';
+        block.style.transform = 'none';
+    }
     // 动画结束后清掉 transform/动画层，避免合成层继续产生亚像素白缝
     block.addEventListener('animationend', () => {
         block.style.animation = 'none';
@@ -535,17 +556,20 @@ function buildColorBlock(hex) {
 }
 
 // 流式追加：开启自动排序时插入到正确位置
-function appendColorBlock(rowEl, hex) {
+function insertSortedBlock(rowEl, hex) {
     const block = buildColorBlock(hex);
-    if (!autoSortEnabled) {
-        rowEl.appendChild(block);
-        return;
-    }
     const value = hexSortValue(hex);
-    const blocks = Array.from(rowEl.children);
-    const next = blocks.find(el => hexSortValue(el.dataset.hex) > value);
+    const next = Array.from(rowEl.children).find(el => hexSortValue(el.dataset.hex) > value);
     if (next) rowEl.insertBefore(block, next);
     else rowEl.appendChild(block);
+}
+
+function appendColorBlock(rowEl, hex) {
+    if (!autoSortEnabled) {
+        rowEl.appendChild(buildColorBlock(hex));
+        return;
+    }
+    insertSortedBlock(rowEl, hex);
 }
 
 function renderRow(index, { animate = true } = {}) {
@@ -553,19 +577,70 @@ function renderRow(index, { animate = true } = {}) {
     if (!rowEl) return;
     rowEl.innerHTML = '';
     displayRow(index).forEach(hex => {
-        const block = buildColorBlock(hex);
-        if (!animate) {
-            block.style.animation = 'none';
-            block.style.opacity = '1';
-            block.style.transform = 'none';
-        }
-        rowEl.appendChild(block);
+        rowEl.appendChild(buildColorBlock(hex, { animate }));
     });
 }
 
 function sortDisplayedRows() {
     if (generatedMatrix.length === 0) return;
     generatedMatrix.forEach((_, index) => renderRow(index, { animate: false }));
+}
+
+// 共有色：出现在超过一半组中的颜色（忽略大小写），始终按色彩值升序
+function commonColors() {
+    const rows = generatedMatrix;
+    if (rows.length === 0) return [];
+
+    const counts = new Map();
+    rows.forEach(row => {
+        new Set(row.map(hex => hex.toUpperCase())).forEach(hex => {
+            counts.set(hex, (counts.get(hex) || 0) + 1);
+        });
+    });
+
+    const threshold = rows.length / 2;
+    return Array.from(counts.entries())
+        .filter(([, count]) => count > threshold)
+        .map(([hex]) => hex)
+        .sort((a, b) => hexSortValue(a) - hexSortValue(b));
+}
+
+const COMMON_ROW_ID = 'palette-row-common';
+
+function removeCommonRow() {
+    document.getElementById(COMMON_ROW_ID)?.remove();
+}
+
+function renderCommonRow({ animate = false } = {}) {
+    const rowEl = document.getElementById(COMMON_ROW_ID);
+    if (!commonColorEnabled) {
+        removeCommonRow();
+        return;
+    }
+    const colors = commonColors();
+    if (colors.length === 0) {
+        removeCommonRow();
+        return;
+    }
+    const target = rowEl || document.createElement('div');
+    target.className = 'palette-row palette-row-common';
+    target.id = COMMON_ROW_ID;
+    target.title = '共有色';
+    target.innerHTML = '';
+    colors.forEach(hex => {
+        target.appendChild(buildColorBlock(hex, { animate }));
+    });
+    if (!rowEl) paletteBoard.appendChild(target);
+}
+
+// 流式过程中合并刷新，避免每个色块都重建共有色行
+let commonRowFrame = 0;
+function scheduleCommonRowUpdate() {
+    if (!commonColorEnabled || commonRowFrame) return;
+    commonRowFrame = requestAnimationFrame(() => {
+        commonRowFrame = 0;
+        renderCommonRow({ animate: false });
+    });
 }
 
 // 构建请求 Payload
@@ -746,6 +821,7 @@ startBtn.addEventListener('click', async () => {
         return runSingleStream(count, (hex) => {
             generatedMatrix[i].push(hex);
             appendColorBlock(rowEl, hex);
+            scheduleCommonRowUpdate();
         }).catch(err => {
             console.error(`第 ${i + 1} 组失败:`, err);
             rowEl.style.outline = '2px dashed red';
@@ -778,6 +854,10 @@ exportBtn.addEventListener('click', () => {
     const validRows = generatedMatrix
         .map((_, index) => displayRow(index))
         .filter(row => row.length > 0);
+    if (commonColorEnabled) {
+        const common = commonColors();
+        if (common.length > 0) validRows.push(common);
+    }
     if (validRows.length === 0) return;
 
     const blockWidth = 80;
