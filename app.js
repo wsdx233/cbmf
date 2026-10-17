@@ -167,6 +167,7 @@ function setAutoSort(enabled) {
 autoSortSwitch.addEventListener('click', () => {
     setAutoSort(!autoSortEnabled);
     sortDisplayedRows();
+    renderCommonRow({ animate: false });
     saveConfig();
 });
 
@@ -179,6 +180,7 @@ function setHslSort(enabled) {
 hslSortSwitch.addEventListener('click', () => {
     setHslSort(!hslSortEnabled);
     sortDisplayedRows();
+    renderCommonRow({ animate: false });
     saveConfig();
 });
 
@@ -698,7 +700,7 @@ function sortDisplayedRows() {
     generatedMatrix.forEach((_, index) => renderRow(index, { animate: false }));
 }
 
-// 共有色：出现在超过一半组中的颜色（忽略大小写），始终按色彩值升序
+// 共有色：出现在超过一半组中的颜色（忽略大小写），始终按当前排序算法排列
 function commonColors() {
     const rows = generatedMatrix;
     if (rows.length === 0) return [];
