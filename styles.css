@@ -248,9 +248,12 @@ input:focus, select:focus {
 /* 自动排序开关 */
 .switch-group {
     display: flex;
+    flex-wrap: wrap;
     align-items: center;
-    gap: 14px;
+    gap: 14px 20px;
     align-self: end;
+    /* 横跨整行，容纳两组「标签 + 开关」，避免标签被挤到换行 */
+    grid-column: 1 / -1;
     min-height: 64px;
 }
 
@@ -259,6 +262,7 @@ input:focus, select:focus {
     font-weight: 700;
     color: var(--text-sub);
     letter-spacing: 0.5px;
+    white-space: nowrap;
     cursor: pointer;
 }
 
