@@ -653,6 +653,7 @@ function createPayload(provider, model, promptText, count) {
     const systemPrompt = `你是一个色彩提取引擎。请根据用户需求生成严格由十六进制色彩HEX组成的JSON数组，包含准确的${count}个颜色。格式范例：["#A1B2C3", "#FFFFFF"]。除了纯JSON格式数据本身外，严禁输出任何解释、注释、Markdown标签或无意义文字。`;
     const reasoningMode = reasoningPresetEl.value;
     const customVal = customReasoningEffortEl.value;
+    const baseUrl = baseUrlEl.value.replace(/\/+$/, '');
 
     if (provider === 'chat') {
         const body = {
@@ -666,7 +667,7 @@ function createPayload(provider, model, promptText, count) {
         if (reasoningMode !== 'none') {
             body.reasoning_effort = reasoningMode === 'custom' ? Number(customVal) || customVal : reasoningMode;
         }
-        return { url: `${baseUrlEl.value.replace(/\/+$/, '')}/chat/completions`, body };
+        return { url: `${baseUrl}/chat/completions`, body };
     } 
     
     if (provider === 'response') {
@@ -680,7 +681,7 @@ function createPayload(provider, model, promptText, count) {
                 effort: reasoningMode === 'custom' ? Number(customVal) || customVal : reasoningMode
             };
         }
-        return { url: `${baseUrlEl.value.replace(/\/+$/, '')}/responses`, body };
+        return { url: `${baseUrl}/responses`, body };
     }
 
     if (provider === 'message') {
@@ -697,7 +698,8 @@ function createPayload(provider, model, promptText, count) {
             const budget = reasoningMode === 'custom' ? Number(customVal) : 2048;
             body.thinking = { type: "enabled", budget_tokens: budget };
         }
-        return { url: `${baseUrlEl.value.replace(/\/+$/, '')}/v1/messages`, body };
+        // 用户常把 OpenAI 风格的 /v1 留在 Base URL 末尾，去掉后再拼 Claude 的版本路径
+        return { url: `${baseUrl.replace(/\/v1$/, '')}/v1/messages`, body };
     }
 }
 
@@ -735,10 +737,73 @@ async function runSingleStream(totalCount, onColorFound) {
     const decoder = new TextDecoder('utf-8');
     let buffer = '';
     let rawAccumulated = '';
-    let capturedColors = [];
+    let emitted = 0;
 
-    // 正则实时捕获 3 位或 6 位 Hex 颜色
-    const hexRegex = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b/g;
+    // 颜色后必须紧跟一个非 HEX 字符；字符串末尾不算完整。
+    // 否则流式分片在 "#A1B" 处截断时，\b 会把它当作 3 位 HEX 永久占位，真正的 6 位值被跳过。
+    const hexRegex = /#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?=[^0-9a-fA-F])/g;
+
+    // matches 只会在累计文本尾部新增，已带分隔符的匹配不会因后续追加而改变
+    let scanFrom = 0;
+    const captureColors = ({ flush = false } = {}) => {
+        if (emitted >= totalCount) return;
+        // 流已结束时不再有后续分片，末尾颜色视为完整
+        const source = flush ? `${rawAccumulated}\n` : rawAccumulated;
+        hexRegex.lastIndex = scanFrom;
+        let match;
+        while (emitted < totalCount && (match = hexRegex.exec(source)) !== null) {
+            onColorFound(match[0].toUpperCase());
+            emitted++;
+            scanFrom = hexRegex.lastIndex;
+        }
+        // 只有最后一个 '#' 之后的颜色可能因分片尚未收尾，从那里重扫即可，避免每帧重扫全文
+        if (emitted < totalCount) {
+            const tailStart = source.lastIndexOf('#');
+            if (tailStart > scanFrom) scanFrom = tailStart;
+        }
+    };
+
+    const handleLine = (line) => {
+        const trimmed = line.trim();
+        if (!trimmed || trimmed.startsWith(':')) return;
+        if (trimmed === 'data: [DONE]') return;
+
+        let dataContent = '';
+        if (trimmed.startsWith('data: ')) {
+            dataContent = trimmed.substring(6);
+        } else if (provider === 'response') {
+            dataContent = trimmed;
+        }
+
+        let parsed;
+        try {
+            parsed = JSON.parse(dataContent);
+        } catch (e) {
+            return; // 忽略非 JSON 行
+        }
+
+        let token = '';
+
+        if (provider === 'chat') {
+            token = parsed.choices?.[0]?.delta?.content || '';
+        } else if (provider === 'response') {
+            // 只取最终输出文本，reasoning summary 等事件的 delta 不是结果
+            if (parsed.type === 'response.output_text.delta') {
+                token = parsed.delta || '';
+            } else if (!parsed.type) {
+                // 兼容不带 type 的旧式/中转实现
+                token = parsed.delta || parsed.output_text_delta || '';
+            }
+        } else if (provider === 'message') {
+            if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
+                token = parsed.delta.text || '';
+            }
+        }
+
+        if (!token) return;
+        rawAccumulated += token;
+        captureColors();
+    };
 
     while (true) {
         const { done, value } = await reader.read();
@@ -747,52 +812,12 @@ async function runSingleStream(totalCount, onColorFound) {
 
         const lines = buffer.split('\n');
         buffer = lines.pop(); // 保留不完整分片
-
-        for (const line of lines) {
-            const trimmed = line.trim();
-            if (!trimmed || trimmed.startsWith(':')) continue;
-            if (trimmed === 'data: [DONE]') continue;
-
-            let dataContent = '';
-            if (trimmed.startsWith('data: ')) {
-                dataContent = trimmed.substring(6);
-            } else if (provider === 'response') {
-                dataContent = trimmed;
-            }
-
-            try {
-                const parsed = JSON.parse(dataContent);
-                let token = '';
-
-                if (provider === 'chat') {
-                    token = parsed.choices?.[0]?.delta?.content || '';
-                } else if (provider === 'response') {
-                    token = parsed.delta || parsed.output_text_delta || '';
-                } else if (provider === 'message') {
-                    if (parsed.type === 'content_block_delta' && parsed.delta?.type === 'text_delta') {
-                        token = parsed.delta.text || '';
-                    }
-                }
-
-                if (token) {
-                    rawAccumulated += token;
-                    let match;
-                    while ((match = hexRegex.exec(rawAccumulated)) !== null) {
-                        const hex = match[0].toUpperCase();
-                        if (capturedColors.length < totalCount) {
-                            // 仅当新捕获时追加
-                            if (capturedColors.indexOf(match.index) === -1) {
-                                capturedColors.push(match.index);
-                                onColorFound(hex);
-                            }
-                        }
-                    }
-                }
-            } catch (e) {
-                // 忽略非 JSON 行
-            }
-        }
+        lines.forEach(handleLine);
     }
+
+    buffer += decoder.decode(); // 冲掉解码器中残留的多字节字符
+    if (buffer.trim()) handleLine(buffer);
+    captureColors({ flush: true }); // 末尾没有分隔符的颜色也要收进来
 }
 
 // 开始执行测试

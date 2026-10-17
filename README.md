@@ -49,11 +49,12 @@ user message 为：
 | --- | --- | --- | --- |
 | `chat` | `{baseUrl}/chat/completions` | 两条 `messages` | `reasoning_effort` |
 | `response` | `{baseUrl}/responses` | 拼接为单个 `input`：`system\n\n需求：user` | `reasoning.effort` |
-| `message` | `{baseUrl}/v1/messages` | `system` 字段 + 单条 user `messages`，`max_tokens` 4096 | `thinking.budget_tokens` |
+| `message` | `{baseUrl}/v1/messages`（末尾 `/v1` 会先去掉，避免 `/v1/v1/messages`） | `system` 字段 + 单条 user `messages`，`max_tokens` 4096 | `thinking.budget_tokens` |
 
 ### 颜色捕获与排序
 
-- 响应按 SSE 行流式解析，累计已输出文本后用 `#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b` 按出现顺序提取，每组只保留前 `count` 个。
+- 响应按 SSE 行流式解析，累计已输出文本后用 `#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})(?=[^0-9a-fA-F])` 按出现顺序提取，每组只保留前 `count` 个。颜色必须被后续非 HEX 字符收尾才算完整，避免分片恰好截在 `#A1B` 时把 6 位值误捕成 3 位；流结束时仍无分隔符的颜色也会补捕。
+- `response` 协议只采纳 `response.output_text.delta` 事件，推理摘要等其它 `delta` 不参与取色。
 - 排序把 HEX 当作十六进制整数比较（`#RRGGBB` 数值小的在前），数值相同则保持原始出现顺序。
 - 共有色先对每组内部去重（忽略大小写），统计每种颜色出现在多少组中，保留出现组数 **严格大于** 组数一半的颜色。
 
