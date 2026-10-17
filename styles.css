@@ -318,11 +318,6 @@ input:focus, select:focus {
     outline-offset: 3px;
 }
 
-.switch:disabled {
-    opacity: 0.38;
-    cursor: default;
-}
-
 /* 操作按钮 */
 .actions-row {
     display: flex;
