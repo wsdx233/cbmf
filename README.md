@@ -98,6 +98,8 @@ app.js       配置持久化、自定义下拉、弹窗栈、请求与流解析�
 
 <https://wsdx233.github.io/cbmf/>
 
+GitHub Pages 对静态资源返回 `Cache-Control: max-age=600`，为让本次改动立即生效，`index.html` 里的 `styles.css` / `app.js` 带 `?v=<commit>` 查询串；改动这两个文件后同步更新该版本号即可绕开旧缓存。
+
 ## 作者
 
 wsdx233 · <https://github.com/wsdx233>
