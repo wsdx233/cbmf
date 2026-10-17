@@ -332,6 +332,7 @@ const presetNameInput = document.getElementById('presetNameInput');
 const presetListEl = document.getElementById('presetList');
 const renamePresetInput = document.getElementById('renamePresetInput');
 const confirmMessageEl = document.getElementById('confirmMessage');
+const aboutDialog = document.getElementById('aboutDialog');
 let renameTargetId = null;
 let confirmAction = null;
 
@@ -430,6 +431,10 @@ document.getElementById('saveConfigBtn').addEventListener('click', () => {
 document.getElementById('loadConfigBtn').addEventListener('click', () => {
     renderPresetList();
     openDialog(presetListDialog);
+});
+
+document.getElementById('aboutBtn').addEventListener('click', () => {
+    openDialog(aboutDialog);
 });
 
 document.getElementById('confirmSavePreset').addEventListener('click', () => {

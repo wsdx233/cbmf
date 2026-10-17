@@ -14,6 +14,9 @@
 <header>
     <h1>模型色彩指纹</h1>
     <div class="header-actions">
+        <button class="icon-btn" id="aboutBtn" title="关于本站" aria-haspopup="dialog">
+            <span class="material-symbols-outlined">info</span>
+        </button>
         <button class="icon-btn" id="loadConfigBtn" title="读取预设">
             <span class="material-symbols-outlined">folder_open</span>
         </button>
@@ -185,6 +188,51 @@
         <div class="dialog-foot">
             <button class="btn-text" type="button" data-dialog-close>取消</button>
             <button class="btn-text danger" type="button" id="confirmOk">删除</button>
+        </div>
+    </div>
+</div>
+
+<!-- 关于本站弹窗 -->
+<div class="dialog-scrim" id="aboutDialog" role="dialog" aria-modal="true" aria-labelledby="aboutTitle" aria-hidden="true" inert>
+    <div class="dialog dialog-about">
+        <div class="dialog-head">
+            <h2 id="aboutTitle">关于本站</h2>
+            <p>一个纯静态的模型色彩指纹测试页：不设服务器，不存数据，只做浏览器与本机配置之间的搬运工。</p>
+        </div>
+        <div class="dialog-body">
+            <section class="about-section">
+                <h3>1. 工作模式</h3>
+                <ul>
+                    <li>API Key、Base URL、模型、预设等全部配置只写入本机浏览器的 <code>localStorage</code>，不会上传到任何地方。</li>
+                    <li>本站是纯静态页面，所有请求由你的浏览器直接发往你填写的 Base URL（跨域请求），不经过任何中继或代理服务器。</li>
+                    <li>本站不记录、不上报请求内容与生成结果；页面关闭后除了浏览器本地配置外不留痕迹。</li>
+                    <li>API Key 会随请求直接交给该 Base URL 背后的服务方，其隐私政策由服务方决定；在公共设备上使用后请清除本地配置。</li>
+                </ul>
+            </section>
+            <section class="about-section">
+                <h3>2. 原理</h3>
+                <p>按「并发重复次数」发起多个完全相同的请求，每组独立流式接收输出；用正则 <code>#(?:[0-9a-fA-F]{6}|[0-9a-fA-F]{3})\b</code> 按出现顺序实时捕获颜色，每组只保留前「每组颜色数量」个。实际发送的内容如下：</p>
+                <p class="about-sub">System Prompt</p>
+                <pre class="about-code">你是一个色彩提取引擎。请根据用户需求生成严格由十六进制色彩HEX组成的JSON数组，包含准确的${count}个颜色。格式范例：["#A1B2C3", "#FFFFFF"]。除了纯JSON格式数据本身外，严禁输出任何解释、注释、Markdown标签或无意义文字。</pre>
+                <p class="about-sub">User Message</p>
+                <pre class="about-code">生成 ${count} 个颜色：&lt;色彩主题描述&gt;</pre>
+                <ul>
+                    <li><strong>chat（经典 OpenAI）</strong>：system 与 user 两条 messages，<code>reasoning_effort</code> 按所选思考强度传入。</li>
+                    <li><strong>response（新 OpenAI）</strong>：system 与 user 拼接为单个 <code>input</code>（<code>system\n\n需求：user</code>），<code>reasoning.effort</code> 按所选思考强度传入。</li>
+                    <li><strong>message（Claude）</strong>：system 放 <code>system</code> 字段，user 放 messages，<code>max_tokens</code> 固定 4096，开启思考时使用 <code>thinking.budget_tokens</code>。</li>
+                </ul>
+                <p class="about-sub">排序</p>
+                <p>把 HEX 当作十六进制整数升序比较（<code>#RRGGBB</code> 数值越小越靠前），数值相同的颜色保持原始出现顺序。开启「自动排序」后，每一行在流式追加时即插入到正确位置；导出的图像也按当前展示顺序绘制。</p>
+                <p class="about-sub">共有色</p>
+                <p>先对每组内部去重（忽略大小写），统计每种颜色出现在多少个组中；保留出现组数<strong>严格超过一半</strong>（组数 ÷ 2）的颜色，统一转为大写并按 HEX 数值升序排列，追加为最下方一行。该行始终自动排序，开启「共有色」时也会一并进入导出图像。</p>
+            </section>
+            <section class="about-section">
+                <h3>3. 作者</h3>
+                <p>wsdx233 · 开源仓库：<a class="about-link" href="https://github.com/wsdx233/cbmf" target="_blank" rel="noopener noreferrer">https://github.com/wsdx233/cbmf</a></p>
+            </section>
+        </div>
+        <div class="dialog-foot">
+            <button class="btn-text" type="button" data-dialog-close data-autofocus>关闭</button>
         </div>
     </div>
 </div>
